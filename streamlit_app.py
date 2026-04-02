@@ -30,8 +30,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-if st.button("Clear Cache"):
-    st.cache_resource.clear()
 
 # ========================= INITIALIZE SESSION STATE =========================
 if "patient_verified" not in st.session_state:
