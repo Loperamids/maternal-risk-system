@@ -195,7 +195,22 @@ with tab1:
 
         risk = "High Risk" if pred == 1 else "Low Risk"
 
-        st.error(f"Predicted Risk: {risk}") if risk == "High Risk" else st.success(f"Predicted Risk: {risk}")
+        if risk == "High Risk":
+            st.error(f"Predicted Risk: {risk}")
+        else:
+            st.success(f"Predicted Risk: {risk}")
+
+        # ================= MODEL PERFORMANCE =================
+        st.subheader("Model Performance")
+
+        col1, col2, col3, col4 = st.columns(4)
+
+        col1.metric("Accuracy", f"{metrics['accuracy']:.3f}")
+        col2.metric("Precision", f"{metrics['precision']:.3f}")
+        col3.metric("Recall", f"{metrics['recall']:.3f}")
+        col4.metric("F1 Score", f"{metrics['f1']:.3f}")
+
+        st.info("These metrics are based on test dataset evaluation.")
 
         record = pd.DataFrame([{
             "Patient_ID": patient_id,
