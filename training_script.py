@@ -47,6 +47,15 @@ Xte_scaled = scaler.transform(Xte)
 model = RandomForestClassifier(n_estimators=200, class_weight="balanced", random_state=42)
 model.fit(Xtr_scaled, ytr)
 
+# ========================= TRAIN METRICS =========================
+ytrain_pred = model.predict(Xtr_scaled)
+
+train_metrics = {
+    "accuracy": accuracy_score(ytr, ytrain_pred),
+    "precision": precision_score(ytr, ytrain_pred),
+    "recall": recall_score(ytr, ytrain_pred),
+    "f1": f1_score(ytr, ytrain_pred)
+}
 # ========================= EVALUATE MODEL =========================
 ypred = model.predict(Xte_scaled)
 metrics = {
