@@ -2,10 +2,10 @@
 import pandas as pd
 import numpy as np
 import joblib
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, make_scorer
 
 # ========================= LOAD DATASETS =========================
 df1 = pd.read_excel("maternal_cleaned_bp-1.xlsx", engine='openpyxl')
@@ -29,47 +29,75 @@ df = df[["age","systolic_bp","diastolic_bp","blood_sugar","temperature","heart_r
          "maternal_weight","pre_pregnancy_weight","fetal_age","risk"]]
 df.dropna(subset=["risk"], inplace=True)
 
-# ========================= ADD NOISE (ANTI-OVERFITTING) =========================
+# ========================= ADD NOISE (OPTIONAL) =========================
 for col in ["systolic_bp", "diastolic_bp", "blood_sugar", "temperature"]:
     df[col] = df[col] + np.random.normal(0, 0.5, size=len(df))
 
 # ========================= SPLIT FEATURES & TARGET =========================
 X = df.drop("risk", axis=1)
 y = df["risk"]
-Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
 
 # ========================= SCALE FEATURES =========================
 scaler = StandardScaler()
-Xtr_scaled = scaler.fit_transform(Xtr)
-Xte_scaled = scaler.transform(Xte)
+X_scaled = scaler.fit_transform(X)
 
-# ========================= TRAIN MODEL =========================
-model = RandomForestClassifier(n_estimators=200, class_weight="balanced", random_state=42)
-model.fit(Xtr_scaled, ytr)
+# ========================= CROSS-VALIDATION =========================
+model = RandomForestClassifier(
+    n_estimators=120,
+    max_depth=10,
+    min_samples_split=10,
+    min_samples_leaf=5,
+    max_features="sqrt",
+    class_weight="balanced",
+    random_state=42
+)
 
-# ========================= TRAIN METRICS =========================
-ytrain_pred = model.predict(Xtr_scaled)
+scoring = {
+    'accuracy': make_scorer(accuracy_score),
+    'precision': make_scorer(precision_score),
+    'recall': make_scorer(recall_score),
+    'f1': make_scorer(f1_score)
+}
+
+from sklearn.model_selection import cross_validate
+cv_results = cross_validate(model, X_scaled, y, cv=5, scoring=scoring)
+
+print('Cross-Validation Metrics (5 folds):')
+for metric in scoring.keys():
+    scores = cv_results[f'test_{metric}']
+    print(f'{metric.capitalize()}: Mean={scores.mean():.3f}, Std={scores.std():.3f}')
+
+# ========================= TRAIN FINAL MODEL =========================
+Xtr, Xte, ytr, yte = train_test_split(X_scaled, y, test_size=0.2, random_state=42, stratify=y)
+model.fit(Xtr, ytr)
+
+# ========================= TRAIN & TEST METRICS =========================
+ytrain_pred = model.predict(Xtr)
+ytest_pred = model.predict(Xte)
 
 train_metrics = {
-    "accuracy": accuracy_score(ytr, ytrain_pred),
-    "precision": precision_score(ytr, ytrain_pred),
-    "recall": recall_score(ytr, ytrain_pred),
-    "f1": f1_score(ytr, ytrain_pred)
+    'accuracy': accuracy_score(ytr, ytrain_pred),
+    'precision': precision_score(ytr, ytrain_pred),
+    'recall': recall_score(ytr, ytrain_pred),
+    'f1': f1_score(ytr, ytrain_pred)
 }
-# ========================= EVALUATE MODEL =========================
-ypred = model.predict(Xte_scaled)
-metrics = {
-    "accuracy": accuracy_score(yte, ypred),
-    "precision": precision_score(yte, ypred),
-    "recall": recall_score(yte, ypred),
-    "f1": f1_score(yte, ypred)
+
+test_metrics = {
+    'accuracy': accuracy_score(yte, ytest_pred),
+    'precision': precision_score(yte, ytest_pred),
+    'recall': recall_score(yte, ytest_pred),
+    'f1': f1_score(yte, ytest_pred)
 }
 
 # ========================= SAVE MODEL & ARTIFACTS =========================
-joblib.dump(model, "maternal_model.pkl")
-joblib.dump(scaler, "scaler.pkl")
-joblib.dump(metrics, "metrics.pkl")
-joblib.dump(yte, "ytest.pkl")
-joblib.dump(ypred, "ypred.pkl")
-print("Model trained and saved ✓")
-print(f"Test metrics: {metrics}")
+joblib.dump(model, 'maternal_model.pkl')
+joblib.dump(scaler, 'scaler.pkl')
+joblib.dump(train_metrics, 'train_metrics.pkl')
+joblib.dump(test_metrics, 'metrics.pkl')
+joblib.dump(yte, 'ytest.pkl')
+joblib.dump(ytest_pred, 'ypred.pkl')
+
+print('\\nFinal Model Trained and Saved ✓')
+print(f'Train metrics: {train_metrics}')
+print(f'Test metrics: {test_metrics}')
+
