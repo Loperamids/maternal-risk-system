@@ -2,7 +2,7 @@
 import pandas as pd
 import numpy as np
 import joblib
-from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, make_scorer
@@ -41,7 +41,7 @@ y = df["risk"]
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
 
-# ========================= CROSS-VALIDATION =========================
+# ========================= MODEL =========================
 model = RandomForestClassifier(
     n_estimators=120,
     max_depth=10,
@@ -58,14 +58,6 @@ scoring = {
     'recall': make_scorer(recall_score),
     'f1': make_scorer(f1_score)
 }
-
-from sklearn.model_selection import cross_validate
-cv_results = cross_validate(model, X_scaled, y, cv=5, scoring=scoring)
-
-print('Cross-Validation Metrics (5 folds):')
-for metric in scoring.keys():
-    scores = cv_results[f'test_{metric}']
-    print(f'{metric.capitalize()}: Mean={scores.mean():.3f}, Std={scores.std():.3f}')
 
 # ========================= TRAIN FINAL MODEL =========================
 Xtr, Xte, ytr, yte = train_test_split(X_scaled, y, test_size=0.2, random_state=42, stratify=y)
