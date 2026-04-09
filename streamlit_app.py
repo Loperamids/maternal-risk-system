@@ -1,37 +1,28 @@
 
-
 import streamlit as st
 import pandas as pd
 import numpy as np
 import os
 import joblib
-
 from datetime import datetime
 
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import (
     accuracy_score,
     precision_score,
     recall_score,
     f1_score,
-    confusion_matrix,
-    classification_report
+    confusion_matrix
 )
 
 import matplotlib.pyplot as plt
-import seaborn as sns
 
 st.set_page_config(
     page_title="Maternal Risk Rapid Assessment System",
     page_icon=":hospital:",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
 
-
-# ========================= INITIALIZE SESSION STATE =========================
+# ========================= SESSION STATE =========================
 if "patient_verified" not in st.session_state:
     st.session_state.patient_verified = False
 if "verified_patient_name" not in st.session_state:
@@ -42,11 +33,8 @@ if "verified_patient_id" not in st.session_state:
 # ========================= CSS =========================
 st.markdown("""
     <style>
-    .main-header {font-size:2.5em;font-weight:bold;color:#2E8B57;text-align:center;}
-    .sub-header {font-size:1.5em;font-weight:bold;color:#4682B4;margin-top:20px;}
     .risk-high {color:red;font-weight:bold;}
     .risk-low {color:green;font-weight:bold;}
-    .info-box {background:#e7f3fe;border-left:6px solid #2196F3;padding:10px;}
     </style>
 """, unsafe_allow_html=True)
 
@@ -60,38 +48,28 @@ def generate_patient_id():
             return f"P{nums.max().values[0]+1:04d}"
     return "P0001"
 
-# ========================= MODEL =========================
+# ========================= LOAD MODEL =========================
 @st.cache_resource
 def load_model():
-    if os.path.exists("maternal_model.pkl") and os.path.exists("scaler.pkl"):
-        model = joblib.load("maternal_model.pkl")
-        scaler = joblib.load("scaler.pkl")
-
-        # Load test data
-        if os.path.exists("ytest.pkl") and os.path.exists("ypred.pkl"):
-            yte = joblib.load("ytest.pkl")
-            ypred = joblib.load("ypred.pkl")
-        else:
-            st.error("Missing ytest.pkl or ypred.pkl")
-            st.stop()
-
-        # RECOMPUTE METRICS (THIS IS THE FIX)
-        from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
-
-        metrics = {
-            "accuracy": accuracy_score(yte, ypred),
-            "precision": precision_score(yte, ypred),
-            "recall": recall_score(yte, ypred),
-            "f1": f1_score(yte, ypred)
-        }
-
-        return model, scaler, metrics, yte, ypred
-
-    else:
-        st.error("Model files not found. Please run the training script first.")
+    if not os.path.exists("maternal_model.pkl"):
+        st.error("Model not found. Run training first.")
         st.stop()
 
-# ===== LOAD MODEL =====
+    model = joblib.load("maternal_model.pkl")
+    scaler = joblib.load("scaler.pkl")
+
+    yte = joblib.load("ytest.pkl")
+    ypred = joblib.load("ypred.pkl")
+
+    metrics = {
+        "accuracy": accuracy_score(yte, ypred),
+        "precision": precision_score(yte, ypred),
+        "recall": recall_score(yte, ypred),
+        "f1": f1_score(yte, ypred)
+    }
+
+    return model, scaler, metrics, yte, ypred
+
 model, scaler, metrics, yte, ypred = load_model()
 
 # ========================= TABS =========================
@@ -106,9 +84,9 @@ with tab1:
         ptype = st.radio("Patient Type", ["New Patient", "Existing Patient"])
 
         if ptype == "New Patient":
-            pname = st.text_input("Patient Name", key="new_patient_name")
+            pname = st.text_input("Patient Name")
 
-            if st.button("Register New Patient"):
+            if st.button("Register"):
                 if pname:
                     st.session_state.verified_patient_name = pname
                     st.session_state.verified_patient_id = generate_patient_id()
@@ -119,31 +97,28 @@ with tab1:
                     st.error("Enter patient name")
 
         else:
-            pname = st.text_input("Patient Name", key="verify_name")
-            pid = st.text_input("Patient ID", key="verify_id")
+            pname = st.text_input("Patient Name")
+            pid = st.text_input("Patient ID")
 
-            if st.button("Proceed to Assessment"):
+            if st.button("Verify"):
                 if os.path.exists("patient_records.csv"):
                     df = pd.read_csv("patient_records.csv")
-
                     match = df[
                         (df["Patient_ID"] == pid) &
                         (df["Patient_Name"].str.lower() == pname.lower())
                     ]
-
                     if not match.empty:
+                        st.session_state.patient_verified = True
                         st.session_state.verified_patient_name = pname
                         st.session_state.verified_patient_id = pid
-                        st.session_state.patient_verified = True
-                        st.success("Patient verified")
+                        st.success("Verified")
                         st.rerun()
                     else:
-                        st.error("Patient not found")
-                else:
-                    st.error("No patient records file found")
+                        st.error("Not found")
 
         st.stop()
 
+    # ========================= INPUT =========================
     st.subheader("Input Patient Data")
 
     patient_id = st.session_state.verified_patient_id
@@ -183,33 +158,34 @@ with tab1:
             "fetal_age": fa
         }])
 
-        try:
-            input_df = input_df[scaler.feature_names_in_]
-        except:
-            pass
+        # Ensure correct order
+        input_df = input_df.reindex(columns=scaler.feature_names_in_, fill_value=0)
 
         input_scaled = scaler.transform(input_df)
-        pred = model.predict(input_scaled)[0]
+
+        try:
+            pred = model.predict(input_scaled)[0]
+        except Exception as e:
+            st.error(f"Prediction error: {e}")
+            st.stop()
 
         risk = "High Risk" if pred == 1 else "Low Risk"
 
-        if risk == "High Risk":
+        if pred == 1:
             st.error(f"Predicted Risk: {risk}")
         else:
             st.success(f"Predicted Risk: {risk}")
 
-        # ================= MODEL PERFORMANCE =================
+        # ================= METRICS =================
         st.subheader("Model Performance")
 
         col1, col2, col3, col4 = st.columns(4)
-
         col1.metric("Accuracy", f"{metrics['accuracy']:.3f}")
         col2.metric("Precision", f"{metrics['precision']:.3f}")
         col3.metric("Recall", f"{metrics['recall']:.3f}")
         col4.metric("F1 Score", f"{metrics['f1']:.3f}")
 
-        st.info("These metrics are based on test dataset evaluation.")
-
+        # ================= SAVE RECORD =================
         record = pd.DataFrame([{
             "Patient_ID": patient_id,
             "Patient_Name": patient_name,
@@ -231,7 +207,7 @@ with tab1:
 
         record.to_csv("patient_records.csv", index=False)
 
-    if st.button("Finish & New Patient"):
+    if st.button("Finish"):
         st.session_state.patient_verified = False
         st.rerun()
 
@@ -239,13 +215,13 @@ with tab1:
 with tab2:
     st.subheader("My Records")
 
-    ppid = st.text_input("Patient ID", key="search_pid")
-    pname = st.text_input("Patient Name", key="search_name")
+    pid = st.text_input("Patient ID")
+    pname = st.text_input("Patient Name")
 
-    if st.button("Search My Records"):
+    if st.button("Search"):
         if os.path.exists("patient_records.csv"):
             df = pd.read_csv("patient_records.csv")
             st.dataframe(df[
-                (df["Patient_ID"] == ppid) &
+                (df["Patient_ID"] == pid)  &
                 (df["Patient_Name"].str.lower() == pname.lower())
             ])
