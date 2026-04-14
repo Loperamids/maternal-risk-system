@@ -7,12 +7,8 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, make_scorer
 
-# ========================= LOAD DATASETS =========================
-df1 = pd.read_excel("maternal_cleaned_bp-1.xlsx", engine='openpyxl')
-df2 = pd.read_excel("final_processed_dataset.xlsx", engine='openpyxl')
-
-# ========================= COMBINE DATASETS =========================
-df = pd.concat([df1, df2], ignore_index=True)
+# ========================= LOAD DATASET =========================
+df = pd.read_excel("final_processed_dataset.xlsx", engine='openpyxl')
 
 # ========================= REMOVE DUPLICATES =========================
 df = df.drop_duplicates()
